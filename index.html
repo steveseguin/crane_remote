@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stable Zhiyun Crane V2 Controller</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        button { margin: 5px; padding: 10px; }
+        #status, #log { margin-top: 20px; white-space: pre-wrap; font-family: monospace; }
+        .control-group { display: flex; flex-wrap: wrap; justify-content: center; }
+        .direction-btn { width: 100px; height: 100px; margin: 10px; font-size: 18px; }
+        #up, #down { flex-basis: 100%; }
+    </style>
+</head>
+<body>
+    <h1>Stable Zhiyun Crane V2 Controller</h1>
+    <button id="connect">Connect to Gimbal</button>
+    <div id="controls" style="display: none;">
+        <div class="control-group">
+            <button id="up" class="direction-btn">Up</button>
+            <button id="left" class="direction-btn">Left</button>
+            <button id="right" class="direction-btn">Right</button>
+            <button id="down" class="direction-btn">Down</button>
+        </div>
+    </div>
+    <div id="status"></div>
+    <div id="log"></div>
+    <script>
+        const SERVICE_UUID = "0000fee9-0000-1000-8000-00805f9b34fb";
+        const CHARACTERISTIC_UUID = "d44bc439-abfd-45a2-b575-925416129600";
+        let gimbalglobalCharacteristic;
+        let isMoving = false;
+        let currentDirection = null;
+
+        function log(message) {
+            console.log(message);
+            document.getElementById('log').textContent += message + '\n';
+        }
+
+        document.getElementById('connect').addEventListener('click', connectToGimbal);
+
+        async function connectToGimbal() {
+            try {
+                log('Requesting Bluetooth Device...');
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }]
+                });
+                log('Connecting to GATT Server...');
+                const server = await device.gatt.connect();
+                log('Getting Service...');
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                log('Getting Characteristic...');
+                gimbalglobalCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+                log('Connected to gimbal');
+                document.getElementById('status').textContent = 'Connected to gimbal';
+                document.getElementById('controls').style.display = 'block';
+                document.getElementById('connect').style.display = 'none';
+                setupControlButtons();
+            } catch (error) {
+                log('Error: ' + error);
+            }
+        }
+
+        function setupControlButtons() {
+            const controls = {
+                'up': [0x06, 0x10, 0x01, 0x0e, 0x89, 0xc2, 0xbc, 0x06, 0x10, 0x02, 0x08, 0x00, 0x31, 0xeb],
+                'down': [0x06, 0x10, 0x03, 0x08, 0x00, 0x06, 0xdb, 0x06, 0x10, 0x01, 0x01, 0x76, 0xcc, 0x72],
+                'left': [0x06, 0x10, 0x02, 0x08, 0x00, 0x31, 0xeb, 0x06, 0x10, 0x03, 0x01, 0x76, 0xa2, 0x12],
+                'right': [0x06, 0x10, 0x02, 0x08, 0x00, 0x31, 0xeb, 0x06, 0x10, 0x03, 0x0d, 0xd9, 0xa3, 0x7a]
+            };
+
+            document.querySelectorAll('.direction-btn').forEach(button => {
+                button.addEventListener('mousedown', () => startMoving(controls[button.id], button.id));
+                button.addEventListener('mouseup', stopMoving);
+                button.addEventListener('mouseleave', stopMoving);
+            });
+        }
+
+        function startMoving(packet, direction) {
+            if (isMoving) return;
+            isMoving = true;
+            currentDirection = direction;
+            moveGimbal(packet);
+        }
+
+        function stopMoving() {
+            isMoving = false;
+            currentDirection = null;
+        }
+
+        async function moveGimbal(packet) {
+            if (!isMoving) return;
+
+            try {
+                await sendCommand(packet, currentDirection);
+                setTimeout(() => moveGimbal(packet), 200); // Send command every 200ms
+            } catch (error) {
+                log('Error in moveGimbal: ' + error);
+                isMoving = false;
+            }
+        }
+
+        async function sendCommand(packet, direction) {
+            if (!gimbalglobalCharacteristic) {
+                log('Not connected to gimbal');
+                return;
+            }
+            try {
+                await gimbalglobalCharacteristic.writeValue(new Uint8Array(packet));
+                log(`Sent command (${direction}): ${packet.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+            } catch (error) {
+                log('Error sending command: ' + error);
+                throw error; // Propagate the error to be handled in moveGimbal
+            }
+        }
+    </script>
+</body>
+</html>
