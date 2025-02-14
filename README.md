@@ -10,6 +10,8 @@ A web-based Bluetooth controller for the Zhiyun Crane V2 gimbal. This proof-of-c
 - Command logging for debugging
 - Clean, responsive UI
 
+![image](https://github.com/user-attachments/assets/00d13c58-14de-4f53-927a-e1a90a0dd749)
+
 ## Requirements
 
 - Zhiyun Crane V2 gimbal (may work with other Crane models)
