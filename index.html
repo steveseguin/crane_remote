@@ -32,6 +32,8 @@
         let gimbalglobalCharacteristic;
         let isMoving = false;
         let currentDirection = null;
+        let movementGeneration = 0;
+        let movementTimer = null;
 
         function log(message) {
             console.log(message);
@@ -81,23 +83,35 @@
             if (isMoving) return;
             isMoving = true;
             currentDirection = direction;
-            moveGimbal(packet);
+            const generation = ++movementGeneration;
+            moveGimbal(packet, direction, generation);
         }
 
         function stopMoving() {
             isMoving = false;
             currentDirection = null;
+            ++movementGeneration;
+            if (movementTimer !== null) {
+                clearTimeout(movementTimer);
+                movementTimer = null;
+            }
         }
 
-        async function moveGimbal(packet) {
-            if (!isMoving) return;
+        async function moveGimbal(packet, direction, generation) {
+            if (!isMoving || generation !== movementGeneration) return;
 
             try {
-                await sendCommand(packet, currentDirection);
-                setTimeout(() => moveGimbal(packet), 200); // Send command every 200ms
+                await sendCommand(packet, direction);
+                if (!isMoving || generation !== movementGeneration) return;
+                movementTimer = setTimeout(() => {
+                    if (!isMoving || generation !== movementGeneration) return;
+                    movementTimer = null;
+                    moveGimbal(packet, direction, generation);
+                }, 200); // Send command every 200ms while this hold still owns the loop
             } catch (error) {
+                if (generation !== movementGeneration) return;
                 log('Error in moveGimbal: ' + error);
-                isMoving = false;
+                stopMoving();
             }
         }
 
